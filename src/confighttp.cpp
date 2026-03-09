@@ -23,6 +23,7 @@
 
 #ifdef _WIN32
   #include "platform/windows/misc.h"
+  #include "platform/windows/pad_service_client.h"
 
   #include <vector>
   #include <Windows.h>
@@ -1381,6 +1382,37 @@ namespace confighttp {
     return output_tree;
   }
 
+#ifdef _WIN32
+  /**
+   * @brief Build the current DualSense USB backend status JSON payload.
+   * @return JSON status payload.
+   */
+  nlohmann::json getDualSenseUsbStatusJson() {
+    nlohmann::json output_tree;
+
+    auto client = platf::make_pad_service_client();
+    if (!client) {
+      output_tree["implemented"] = false;
+      output_tree["installed"] = false;
+      output_tree["service_running"] = false;
+      output_tree["version"] = "";
+      output_tree["reason"] = "gamepads.dualsense-usb-not-available";
+      return output_tree;
+    }
+
+    (void) client->init();
+    auto status = client->status();
+
+    output_tree["implemented"] = true;
+    output_tree["installed"] = status.installed;
+    output_tree["service_running"] = status.service_running;
+    output_tree["available"] = status.available;
+    output_tree["version"] = "";
+    output_tree["reason"] = status.reason;
+    return output_tree;
+  }
+#endif
+
   /**
    * @brief Get ViGEmBus driver version and installation status.
    * @param response The HTTP response object.
@@ -1419,10 +1451,8 @@ namespace confighttp {
     output_tree["backends"]["vigem"]["implemented"] = true;
     output_tree["backends"]["vigem"]["mode"] = "legacy";
 
-    output_tree["backends"]["dualsense_usb"]["implemented"] = false;
-    output_tree["backends"]["dualsense_usb"]["installed"] = false;
-    output_tree["backends"]["dualsense_usb"]["version"] = "";
-    output_tree["backends"]["dualsense_usb"]["reason"] = "gamepads.dualsense-usb-not-available";
+    output_tree["backends"]["dualsense_usb"] = getDualSenseUsbStatusJson();
+    output_tree["backends"]["dualsense_usb"]["mode"] = "native_usb";
 #else
     output_tree["backends"]["vigem"]["implemented"] = false;
     output_tree["backends"]["vigem"]["installed"] = false;
