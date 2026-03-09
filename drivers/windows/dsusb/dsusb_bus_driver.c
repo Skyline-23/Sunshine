@@ -4,6 +4,7 @@
  */
 
 #include "dsusb_bus_ioctl.h"
+#include "dsusb_ude_device.h"
 
 #define DSUSB_DEVICE_NAME L"\\Device\\SunshineDualSenseBus"
 #define DSUSB_DOS_DEVICE_NAME L"\\DosDevices\\SunshineDualSenseBus"
@@ -15,6 +16,7 @@ typedef struct _DSUSB_SLOT {
   UCHAR Type;
   USHORT Capabilities;
   ULONG SupportedButtons;
+  DSUSB_UDE_SLOT UdeSlot;
   DSUSB_UPDATE_STATE_PACKET State;
   DSUSB_UPDATE_TOUCH_PACKET Touch;
   DSUSB_UPDATE_MOTION_PACKET Motion;
@@ -72,9 +74,14 @@ static NTSTATUS DsUsbHandleCreateDevice(PDSUSB_DEVICE_EXTENSION extension, PDSUS
   RtlZeroMemory(&extension->Slots[packet->GlobalIndex].Touch, sizeof(DSUSB_UPDATE_TOUCH_PACKET));
   RtlZeroMemory(&extension->Slots[packet->GlobalIndex].Motion, sizeof(DSUSB_UPDATE_MOTION_PACKET));
   RtlZeroMemory(&extension->Slots[packet->GlobalIndex].Battery, sizeof(DSUSB_UPDATE_BATTERY_PACKET));
+  RtlZeroMemory(&extension->Slots[packet->GlobalIndex].UdeSlot, sizeof(DSUSB_UDE_SLOT));
+  status = DsUsbUdeCreate(&extension->Slots[packet->GlobalIndex].UdeSlot, packet);
+  if (!NT_SUCCESS(status)) {
+    RtlZeroMemory(&extension->Slots[packet->GlobalIndex], sizeof(DSUSB_SLOT));
+  }
   ExReleaseFastMutex(&extension->Lock);
 
-  return STATUS_SUCCESS;
+  return status;
 }
 
 static NTSTATUS DsUsbHandleDestroyDevice(PDSUSB_DEVICE_EXTENSION extension, PDSUSB_DESTROY_DEVICE_PACKET packet) {
@@ -84,6 +91,7 @@ static NTSTATUS DsUsbHandleDestroyDevice(PDSUSB_DEVICE_EXTENSION extension, PDSU
   }
 
   ExAcquireFastMutex(&extension->Lock);
+  DsUsbUdeDestroy(&extension->Slots[packet->GlobalIndex].UdeSlot, packet->GlobalIndex);
   RtlZeroMemory(&extension->Slots[packet->GlobalIndex], sizeof(DSUSB_SLOT));
   ExReleaseFastMutex(&extension->Lock);
 
@@ -102,8 +110,9 @@ static NTSTATUS DsUsbHandleUpdateState(PDSUSB_DEVICE_EXTENSION extension, PDSUSB
     return STATUS_DEVICE_DOES_NOT_EXIST;
   }
   extension->Slots[packet->GlobalIndex].State = *packet;
+  status = DsUsbUdeUpdateState(&extension->Slots[packet->GlobalIndex].UdeSlot, packet);
   ExReleaseFastMutex(&extension->Lock);
-  return STATUS_SUCCESS;
+  return status;
 }
 
 static NTSTATUS DsUsbHandleUpdateTouch(PDSUSB_DEVICE_EXTENSION extension, PDSUSB_UPDATE_TOUCH_PACKET packet) {
@@ -118,8 +127,9 @@ static NTSTATUS DsUsbHandleUpdateTouch(PDSUSB_DEVICE_EXTENSION extension, PDSUSB
     return STATUS_DEVICE_DOES_NOT_EXIST;
   }
   extension->Slots[packet->GlobalIndex].Touch = *packet;
+  status = DsUsbUdeUpdateTouch(&extension->Slots[packet->GlobalIndex].UdeSlot, packet);
   ExReleaseFastMutex(&extension->Lock);
-  return STATUS_SUCCESS;
+  return status;
 }
 
 static NTSTATUS DsUsbHandleUpdateMotion(PDSUSB_DEVICE_EXTENSION extension, PDSUSB_UPDATE_MOTION_PACKET packet) {
@@ -134,8 +144,9 @@ static NTSTATUS DsUsbHandleUpdateMotion(PDSUSB_DEVICE_EXTENSION extension, PDSUS
     return STATUS_DEVICE_DOES_NOT_EXIST;
   }
   extension->Slots[packet->GlobalIndex].Motion = *packet;
+  status = DsUsbUdeUpdateMotion(&extension->Slots[packet->GlobalIndex].UdeSlot, packet);
   ExReleaseFastMutex(&extension->Lock);
-  return STATUS_SUCCESS;
+  return status;
 }
 
 static NTSTATUS DsUsbHandleUpdateBattery(PDSUSB_DEVICE_EXTENSION extension, PDSUSB_UPDATE_BATTERY_PACKET packet) {
@@ -150,8 +161,9 @@ static NTSTATUS DsUsbHandleUpdateBattery(PDSUSB_DEVICE_EXTENSION extension, PDSU
     return STATUS_DEVICE_DOES_NOT_EXIST;
   }
   extension->Slots[packet->GlobalIndex].Battery = *packet;
+  status = DsUsbUdeUpdateBattery(&extension->Slots[packet->GlobalIndex].UdeSlot, packet);
   ExReleaseFastMutex(&extension->Lock);
-  return STATUS_SUCCESS;
+  return status;
 }
 
 VOID DsUsbUnload(PDRIVER_OBJECT driver_object) {
