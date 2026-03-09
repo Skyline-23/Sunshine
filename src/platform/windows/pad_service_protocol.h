@@ -56,6 +56,7 @@ namespace platf::pad_service_protocol {
     std::uint8_t installed;
     std::uint8_t service_running;
     std::uint8_t reserved;
+    std::uint32_t driver_version;
   };
 
   struct feedback_header_t {

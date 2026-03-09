@@ -354,6 +354,7 @@ int main() {
         static_cast<std::uint8_t>(current_status.installed ? 1 : 0),
         static_cast<std::uint8_t>(current_status.service_running ? 1 : 0),
         0,
+        current_status.driver_version,
       };
       (void) write_exact(command_pipe, &response, sizeof(response));
       continue;

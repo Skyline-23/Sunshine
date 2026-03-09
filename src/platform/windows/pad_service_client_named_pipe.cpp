@@ -240,6 +240,7 @@ namespace platf {
       status_cache.available = response.available != 0;
       status_cache.installed = response.installed != 0;
       status_cache.service_running = response.service_running != 0;
+      status_cache.version = std::to_string(response.driver_version);
       if (status_cache.available) {
         status_cache.reason.clear();
       } else if (status_cache.reason.empty()) {
@@ -439,6 +440,7 @@ namespace platf {
           true,
           true,
           true,
+          "",
           ""
         };
       }
@@ -452,6 +454,7 @@ namespace platf {
               true,
               true,
               true,
+              "",
               ""
             };
           }
@@ -460,6 +463,7 @@ namespace platf {
           false,
           false,
           false,
+          "",
           "gamepads.dualsense-usb-not-available"
         };
       }
@@ -469,6 +473,7 @@ namespace platf {
           false,
           true,
           true,
+          "",
           "gamepads.dualsense-usb-busy"
         };
       }
@@ -477,6 +482,7 @@ namespace platf {
         false,
         true,
         false,
+        "",
         "gamepads.dualsense-usb-not-available"
       };
     }
@@ -485,6 +491,7 @@ namespace platf {
       false,
       false,
       false,
+      "",
       "gamepads.dualsense-usb-not-available"
     };
     std::array<gamepad_feedback_sink_t, MAX_GAMEPADS> feedback_sinks {};

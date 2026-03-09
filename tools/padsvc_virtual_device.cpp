@@ -30,6 +30,7 @@ namespace padsvc {
           false,
           service_status.installed,
           service_status.service_running,
+          0,
           service_status.reason
         };
       }
@@ -53,6 +54,7 @@ namespace padsvc {
           false,
           service_status.installed,
           service_status.service_running,
+          0,
           "gamepads.dualsense-usb-not-available"
         };
       }
@@ -61,6 +63,7 @@ namespace padsvc {
         true,
         true,
         true,
+        version_payload.Version,
         ""
       };
     }
@@ -146,6 +149,7 @@ namespace padsvc {
           false,
           false,
           false,
+          0,
           "gamepads.dualsense-usb-not-available"
         };
       }
@@ -178,6 +182,7 @@ namespace padsvc {
           false,
           true,
           false,
+          0,
           "gamepads.dualsense-usb-not-available"
         };
       }
@@ -201,6 +206,7 @@ namespace padsvc {
         false,
         true,
         service_running,
+        0,
         service_running ? "" : "gamepads.dualsense-usb-not-available"
       };
     }

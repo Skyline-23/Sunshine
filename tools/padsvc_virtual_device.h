@@ -16,6 +16,7 @@ namespace padsvc {
     bool available {};
     bool installed {};
     bool service_running {};
+    std::uint32_t driver_version {};
     std::string reason;
   };
 
