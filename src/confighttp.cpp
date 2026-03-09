@@ -1335,19 +1335,10 @@ namespace confighttp {
   }
 
   /**
-   * @brief Get ViGEmBus driver version and installation status.
-   * @param response The HTTP response object.
-   * @param request The HTTP request object.
-   *
-   * @api_examples{/api/vigembus/status| GET| null}
+   * @brief Build the current ViGEmBus status JSON payload.
+   * @return JSON status payload.
    */
-  void getViGEmBusStatus(const resp_https_t &response, const req_https_t &request) {
-    if (!authenticate(response, request)) {
-      return;
-    }
-
-    print_req(request);
-
+  nlohmann::json getViGEmBusStatusJson() {
     nlohmann::json output_tree;
 
 #ifdef _WIN32
@@ -1355,13 +1346,11 @@ namespace confighttp {
     bool installed = false;
     bool version_compatible = false;
 
-    // Check if ViGEmBus driver exists
     std::filesystem::path driver_path = std::filesystem::path(std::getenv("SystemRoot") ? std::getenv("SystemRoot") : "C:\\Windows") / "System32" / "drivers" / "ViGEmBus.sys";
 
     if (std::filesystem::exists(driver_path)) {
       installed = platf::getFileVersionInfo(driver_path, version_str);
       if (installed) {
-        // Parse version string to check compatibility (>= 1.17.0.0)
         std::vector<std::string> version_parts;
         std::stringstream ss(version_str);
         std::string part;
@@ -1387,6 +1376,61 @@ namespace confighttp {
     output_tree["version"] = "";
     output_tree["version_compatible"] = false;
     output_tree["packaged_version"] = "";
+#endif
+
+    return output_tree;
+  }
+
+  /**
+   * @brief Get ViGEmBus driver version and installation status.
+   * @param response The HTTP response object.
+   * @param request The HTTP request object.
+   *
+   * @api_examples{/api/vigembus/status| GET| null}
+   */
+  void getViGEmBusStatus(const resp_https_t &response, const req_https_t &request) {
+    if (!authenticate(response, request)) {
+      return;
+    }
+
+    print_req(request);
+    send_response(response, getViGEmBusStatusJson());
+  }
+
+  /**
+   * @brief Get generalized Windows gamepad backend status information.
+   * @param response The HTTP response object.
+   * @param request The HTTP request object.
+   *
+   * @api_examples{/api/gamepads/backends| GET| null}
+   */
+  void getGamepadBackendStatus(const resp_https_t &response, const req_https_t &request) {
+    if (!authenticate(response, request)) {
+      return;
+    }
+
+    print_req(request);
+
+    nlohmann::json output_tree;
+    output_tree["selected_mode"] = config::input.gamepad;
+
+#ifdef _WIN32
+    output_tree["backends"]["vigem"] = getViGEmBusStatusJson();
+    output_tree["backends"]["vigem"]["implemented"] = true;
+    output_tree["backends"]["vigem"]["mode"] = "legacy";
+
+    output_tree["backends"]["dualsense_usb"]["implemented"] = false;
+    output_tree["backends"]["dualsense_usb"]["installed"] = false;
+    output_tree["backends"]["dualsense_usb"]["version"] = "";
+    output_tree["backends"]["dualsense_usb"]["reason"] = "gamepads.dualsense-usb-not-available";
+#else
+    output_tree["backends"]["vigem"]["implemented"] = false;
+    output_tree["backends"]["vigem"]["installed"] = false;
+    output_tree["backends"]["vigem"]["reason"] = "windows-only";
+
+    output_tree["backends"]["dualsense_usb"]["implemented"] = false;
+    output_tree["backends"]["dualsense_usb"]["installed"] = false;
+    output_tree["backends"]["dualsense_usb"]["reason"] = "windows-only";
 #endif
 
     send_response(response, output_tree);
@@ -1523,6 +1567,7 @@ namespace confighttp {
     server.resource["^/api/logs$"]["GET"] = getLogs;
     server.resource["^/api/reset-display-device-persistence$"]["POST"] = resetDisplayDevicePersistence;
     server.resource["^/api/restart$"]["POST"] = restart;
+    server.resource["^/api/gamepads/backends$"]["GET"] = getGamepadBackendStatus;
     server.resource["^/api/vigembus/status$"]["GET"] = getViGEmBusStatus;
     server.resource["^/api/vigembus/install$"]["POST"] = installViGEmBus;
 
