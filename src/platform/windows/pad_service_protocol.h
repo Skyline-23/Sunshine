@@ -11,6 +11,7 @@
 namespace platf::pad_service_protocol {
   constexpr std::uint32_t version = 1;
   constexpr auto named_pipe_path = LR"(\\.\pipe\SunshinePadService)";
+  constexpr auto named_pipe_feedback_path = LR"(\\.\pipe\SunshinePadServiceFeedback)";
 
   enum class command_e: std::uint16_t {
     create_dualsense_device = 1,

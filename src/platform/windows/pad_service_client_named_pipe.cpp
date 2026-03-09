@@ -9,7 +9,11 @@
 
 // standard includes
 #include <array>
+#include <atomic>
+#include <cstring>
 #include <memory>
+#include <thread>
+#include <vector>
 
 // local includes
 #include "pad_service_client.h"
@@ -23,7 +27,23 @@ namespace platf {
   public:
     int init() override {
       status_cache = probe_status();
+      if (status_cache.available) {
+        maybe_start_feedback_pump();
+      }
       return 0;
+    }
+
+    ~named_pipe_pad_service_client_t() override {
+      shutdown_requested = true;
+
+      if (feedback_pipe != INVALID_HANDLE_VALUE) {
+        CloseHandle(feedback_pipe);
+        feedback_pipe = INVALID_HANDLE_VALUE;
+      }
+
+      if (feedback_thread.joinable()) {
+        feedback_thread.join();
+      }
     }
 
     pad_service_status_t status() const override {
@@ -137,6 +157,20 @@ namespace platf {
 
   private:
     template<typename T>
+    bool decode_feedback_packet(const pad_service_protocol::feedback_header_t &header, const std::vector<std::uint8_t> &payload, T &packet) {
+      const auto expected_payload_size = sizeof(T) - sizeof(pad_service_protocol::feedback_header_t);
+      if (payload.size() != expected_payload_size) {
+        return false;
+      }
+
+      std::memcpy(&packet.header, &header, sizeof(header));
+      if (expected_payload_size > 0) {
+        std::memcpy(reinterpret_cast<std::uint8_t *>(&packet) + sizeof(header), payload.data(), expected_payload_size);
+      }
+      return true;
+    }
+
+    template<typename T>
     int send_command(const T &command) {
       if (!status_cache.available) {
         return -1;
@@ -164,6 +198,7 @@ namespace platf {
         return -1;
       }
 
+      maybe_start_feedback_pump();
       return 0;
     }
 
@@ -177,6 +212,115 @@ namespace platf {
         0,
         nullptr
       );
+    }
+
+    HANDLE open_feedback_pipe() const {
+      return CreateFileW(
+        pad_service_protocol::named_pipe_feedback_path,
+        GENERIC_READ,
+        0,
+        nullptr,
+        OPEN_EXISTING,
+        0,
+        nullptr
+      );
+    }
+
+    void maybe_start_feedback_pump() {
+      if (feedback_thread.joinable() || shutdown_requested) {
+        return;
+      }
+
+      auto pipe = open_feedback_pipe();
+      if (pipe == INVALID_HANDLE_VALUE) {
+        return;
+      }
+
+      feedback_pipe = pipe;
+      feedback_thread = std::thread([this] {
+        feedback_loop();
+      });
+    }
+
+    void feedback_loop() {
+      while (!shutdown_requested) {
+        pad_service_protocol::feedback_header_t header {};
+        DWORD bytes_read = 0;
+        if (!ReadFile(feedback_pipe, &header, sizeof(header), &bytes_read, nullptr) || bytes_read != sizeof(header)) {
+          break;
+        }
+
+        std::vector<std::uint8_t> payload(header.payload_size);
+        if (!payload.empty()) {
+          bytes_read = 0;
+          if (!ReadFile(feedback_pipe, payload.data(), static_cast<DWORD>(payload.size()), &bytes_read, nullptr) || bytes_read != payload.size()) {
+            break;
+          }
+        }
+
+        dispatch_feedback(header, payload);
+      }
+
+      if (feedback_pipe != INVALID_HANDLE_VALUE) {
+        CloseHandle(feedback_pipe);
+        feedback_pipe = INVALID_HANDLE_VALUE;
+      }
+    }
+
+    void dispatch_feedback(const pad_service_protocol::feedback_header_t &header, const std::vector<std::uint8_t> &payload) {
+      switch (static_cast<pad_service_protocol::feedback_type_e>(header.type)) {
+        case pad_service_protocol::feedback_type_e::rumble:
+          {
+            pad_service_protocol::rumble_t packet {};
+            if (decode_feedback_packet(header, payload, packet)) {
+              emit_feedback(header.global_index, gamepad_feedback_msg_t::make_rumble(header.client_relative_index, packet.lowfreq, packet.highfreq));
+            }
+          }
+          break;
+        case pad_service_protocol::feedback_type_e::rumble_triggers:
+          {
+            pad_service_protocol::rumble_triggers_t packet {};
+            if (decode_feedback_packet(header, payload, packet)) {
+              emit_feedback(header.global_index, gamepad_feedback_msg_t::make_rumble_triggers(header.client_relative_index, packet.left, packet.right));
+            }
+          }
+          break;
+        case pad_service_protocol::feedback_type_e::motion_report_rate:
+          {
+            pad_service_protocol::motion_report_rate_t packet {};
+            if (decode_feedback_packet(header, payload, packet)) {
+              emit_feedback(header.global_index, gamepad_feedback_msg_t::make_motion_event_state(header.client_relative_index, packet.motion_type, packet.report_rate));
+            }
+          }
+          break;
+        case pad_service_protocol::feedback_type_e::rgb_led:
+          {
+            pad_service_protocol::rgb_led_t packet {};
+            if (decode_feedback_packet(header, payload, packet)) {
+              emit_feedback(header.global_index, gamepad_feedback_msg_t::make_rgb_led(header.client_relative_index, packet.r, packet.g, packet.b));
+            }
+          }
+          break;
+        case pad_service_protocol::feedback_type_e::adaptive_triggers:
+          {
+            pad_service_protocol::adaptive_triggers_t packet {};
+            if (decode_feedback_packet(header, payload, packet)) {
+              emit_feedback(header.global_index, gamepad_feedback_msg_t::make_adaptive_triggers(header.client_relative_index, packet.event_flags, packet.type_left, packet.type_right, packet.left, packet.right));
+            }
+          }
+          break;
+      }
+    }
+
+    void emit_feedback(int global_index, gamepad_feedback_msg_t msg) {
+      if (global_index < 0 || global_index >= feedback_sinks.size()) {
+        return;
+      }
+
+      auto &sink = feedback_sinks[global_index];
+      if (sink) {
+        sink(std::move(msg));
+      }
     }
 
     pad_service_status_t probe_status() const {
@@ -223,6 +367,9 @@ namespace platf {
       "gamepads.dualsense-usb-not-available"
     };
     std::array<gamepad_feedback_sink_t, MAX_GAMEPADS> feedback_sinks {};
+    std::atomic_bool shutdown_requested {false};
+    HANDLE feedback_pipe {INVALID_HANDLE_VALUE};
+    std::thread feedback_thread;
   };
 
   std::unique_ptr<pad_service_client_t> make_pad_service_client() {
