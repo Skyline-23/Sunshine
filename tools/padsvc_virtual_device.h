@@ -14,6 +14,8 @@
 namespace padsvc {
   struct virtual_device_status_t {
     bool available {};
+    bool installed {};
+    bool service_running {};
     std::string reason;
   };
 

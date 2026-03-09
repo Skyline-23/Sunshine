@@ -18,15 +18,19 @@
 namespace padsvc {
   namespace bus = platf::dualsense_usb_bus;
   namespace protocol = platf::pad_service_protocol;
+  constexpr auto driver_service_name = L"SunshineDualSenseBus";
 
   class dsusb_virtual_device_backend_t final: public virtual_device_backend_t {
   public:
     virtual_device_status_t status() const override {
+      auto service_status = ensure_driver_service();
       HANDLE handle = open_bus();
       if (handle == INVALID_HANDLE_VALUE) {
         return {
           false,
-          "gamepads.dualsense-usb-not-available"
+          service_status.installed,
+          service_status.service_running,
+          service_status.reason
         };
       }
 
@@ -47,11 +51,15 @@ namespace padsvc {
       if (!ok) {
         return {
           false,
+          service_status.installed,
+          service_status.service_running,
           "gamepads.dualsense-usb-not-available"
         };
       }
 
       return {
+        true,
+        true,
         true,
         ""
       };
@@ -131,6 +139,72 @@ namespace padsvc {
     }
 
   private:
+    virtual_device_status_t ensure_driver_service() const {
+      SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+      if (scm == nullptr) {
+        return {
+          false,
+          false,
+          false,
+          "gamepads.dualsense-usb-not-available"
+        };
+      }
+
+      SC_HANDLE service = OpenServiceW(scm, driver_service_name, SERVICE_QUERY_STATUS | SERVICE_START);
+      if (service == nullptr) {
+        CloseServiceHandle(scm);
+        return {
+          false,
+          false,
+          false,
+          "gamepads.dualsense-usb-not-available"
+        };
+      }
+
+      SERVICE_STATUS_PROCESS status {};
+      DWORD bytes_needed = 0;
+      const auto queried = QueryServiceStatusEx(
+        service,
+        SC_STATUS_PROCESS_INFO,
+        reinterpret_cast<LPBYTE>(&status),
+        sizeof(status),
+        &bytes_needed
+      );
+
+      if (!queried) {
+        CloseServiceHandle(service);
+        CloseServiceHandle(scm);
+        return {
+          false,
+          true,
+          false,
+          "gamepads.dualsense-usb-not-available"
+        };
+      }
+
+      if (status.dwCurrentState != SERVICE_RUNNING) {
+        StartServiceW(service, 0, nullptr);
+        QueryServiceStatusEx(
+          service,
+          SC_STATUS_PROCESS_INFO,
+          reinterpret_cast<LPBYTE>(&status),
+          sizeof(status),
+          &bytes_needed
+        );
+      }
+
+      auto service_running = status.dwCurrentState == SERVICE_RUNNING;
+      CloseServiceHandle(service);
+      CloseServiceHandle(scm);
+
+      return {
+        false,
+        true,
+        service_running,
+        service_running ? "" : "gamepads.dualsense-usb-not-available"
+      };
+    }
+
     HANDLE open_bus() const {
       return CreateFileW(
         bus::device_path,

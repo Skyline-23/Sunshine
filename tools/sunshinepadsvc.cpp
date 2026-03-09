@@ -350,8 +350,8 @@ int main() {
           status,
         },
         static_cast<std::uint8_t>(current_status.available ? 1 : 0),
-        static_cast<std::uint8_t>(current_status.available ? 1 : 0),
-        1,
+        static_cast<std::uint8_t>(current_status.installed ? 1 : 0),
+        static_cast<std::uint8_t>(current_status.service_running ? 1 : 0),
         0,
       };
       (void) write_exact(command_pipe, &response, sizeof(response));
