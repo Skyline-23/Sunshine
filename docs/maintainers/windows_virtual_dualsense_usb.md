@@ -8,6 +8,22 @@
 - Source of truth: this document
 - Progress: Phase 1 started, Windows input layer now has an explicit backend boundary around the legacy ViGEm path
 
+## Current Implementation Snapshot
+
+The repository now contains the following implementation layers:
+
+- Windows input backend abstraction
+- legacy ViGEm backend isolated into its own file
+- `dualsense_usb` backend skeleton wired to a pad service client
+- named-pipe pad service protocol and client
+- `sunshinepadsvc` server skeleton
+- DSUSB bus driver skeleton
+- DSUSB `bus` and `UDE device` split
+- DualSense descriptor skeleton
+- DSUSB INF package and install scripts
+
+This means the control plane and process boundaries are mostly in place. The main remaining work is inside the driver-side UDE implementation and the output report path.
+
 ## Problem Statement
 
 Sunshine currently supports Windows virtual gamepads through ViGEm only. In practice, that means:
@@ -440,6 +456,14 @@ Acceptance:
 - test utility can send input reports
 - test utility can receive output reports
 
+Current state:
+
+- control device exists as a skeleton
+- IOCTLs are defined and wired
+- per-slot state exists
+- UDE/device creation is still stubbed
+- HID descriptor exists only as a minimal development placeholder
+
 ### Phase 6: Sunshine DualSense USB Backend
 
 - implement `DualSenseUsbBackend`
@@ -515,3 +539,10 @@ The Windows Virtual USB DualSense effort is only considered complete when all of
 - [ ] Create DSUSB-Lite driver skeleton
 - [ ] Implement `DualSenseUsbBackend`
 - [ ] Add mode-aware configuration and diagnostics
+
+## Remaining High-Risk Work
+
+- Real UDE-backed USB device creation inside `drivers/windows/dsusb/dsusb_ude_device.c`
+- Real DualSense HID input/output report model
+- Driver-to-service output report forwarding for rumble, RGB LED, and adaptive triggers
+- Driver packaging/signing/build integration on Windows
