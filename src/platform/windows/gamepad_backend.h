@@ -25,5 +25,7 @@ namespace platf {
     virtual const std::vector<supported_gamepad_t> &supported_gamepads() const = 0;
   };
 
+  std::unique_ptr<windows_gamepad_backend_t> make_dualsense_usb_gamepad_backend();
   std::unique_ptr<windows_gamepad_backend_t> make_gamepad_backend();
+  std::unique_ptr<windows_gamepad_backend_t> make_vigem_gamepad_backend();
 }  // namespace platf

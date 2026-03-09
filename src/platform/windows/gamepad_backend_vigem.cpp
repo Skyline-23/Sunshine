@@ -402,7 +402,8 @@ namespace platf {
     static const std::vector gps {
       supported_gamepad_t {"auto", true, ""},
       supported_gamepad_t {"x360", true, ""},
-      supported_gamepad_t {"ds4", true, ""}
+      supported_gamepad_t {"ds4", true, ""},
+      supported_gamepad_t {"dualsense_usb", false, "gamepads.dualsense-usb-not-available"}
     };
 
     return gps;
@@ -697,7 +698,7 @@ namespace platf {
     ds4_update_ts_and_send(battery.id.globalIndex);
   }
 
-  std::unique_ptr<windows_gamepad_backend_t> make_gamepad_backend() {
+  std::unique_ptr<windows_gamepad_backend_t> make_vigem_gamepad_backend() {
     return std::make_unique<vigem_backend_t>();
   }
 }  // namespace platf

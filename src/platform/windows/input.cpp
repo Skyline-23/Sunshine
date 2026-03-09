@@ -832,6 +832,7 @@ namespace platf {
         supported_gamepad_t {"auto", true, ""},
         supported_gamepad_t {"x360", false, ""},
         supported_gamepad_t {"ds4", false, ""},
+        supported_gamepad_t {"dualsense_usb", false, ""},
       };
 
       return gps;
@@ -845,7 +846,8 @@ namespace platf {
     static std::vector gps {
       supported_gamepad_t {"auto", true, "gamepads.vigem-not-available"},
       supported_gamepad_t {"x360", false, "gamepads.vigem-not-available"},
-      supported_gamepad_t {"ds4", false, "gamepads.vigem-not-available"}
+      supported_gamepad_t {"ds4", false, "gamepads.vigem-not-available"},
+      supported_gamepad_t {"dualsense_usb", false, "gamepads.dualsense-usb-not-available"}
     };
 
     for (auto &[name, is_enabled, reason_disabled] : gps) {
