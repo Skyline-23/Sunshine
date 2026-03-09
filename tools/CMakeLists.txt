@@ -44,7 +44,7 @@ target_link_libraries(sunshinesvc
         ${PLATFORM_LIBRARIES})
 target_compile_options(sunshinesvc PRIVATE ${SUNSHINE_COMPILE_OPTIONS})
 
-add_executable(sunshinepadsvc sunshinepadsvc.cpp ${TOOL_SOURCES})
+add_executable(sunshinepadsvc sunshinepadsvc.cpp padsvc_virtual_device.cpp ${TOOL_SOURCES})
 set_target_properties(sunshinepadsvc PROPERTIES CXX_STANDARD 23)
 target_link_libraries(sunshinepadsvc
         ${Boost_LIBRARIES}

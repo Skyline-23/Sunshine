@@ -17,6 +17,8 @@
 #include <vector>
 
 // local includes
+#include "third-party/moonlight-common-c/src/Limelight.h"
+#include "padsvc_virtual_device.h"
 #include "src/platform/windows/pad_service_protocol.h"
 
 namespace {
@@ -33,6 +35,24 @@ namespace {
   std::atomic_bool running {true};
   std::mutex slot_mutex;
   std::array<dualsense_slot_t, 16> slots {};
+  std::mutex feedback_mutex;
+  HANDLE feedback_pipe_handle = INVALID_HANDLE_VALUE;
+  auto device_backend = padsvc::make_virtual_device_backend();
+
+  bool write_exact(HANDLE pipe, const void *buffer, DWORD size) {
+    const auto *bytes = static_cast<const std::uint8_t *>(buffer);
+    DWORD total_written = 0;
+
+    while (total_written < size) {
+      DWORD bytes_written = 0;
+      if (!WriteFile(pipe, bytes + total_written, size - total_written, &bytes_written, nullptr) || bytes_written == 0) {
+        return false;
+      }
+      total_written += bytes_written;
+    }
+
+    return true;
+  }
 
   BOOL WINAPI console_ctrl_handler(DWORD ctrl_type) {
     if (ctrl_type == CTRL_C_EVENT || ctrl_type == CTRL_BREAK_EVENT || ctrl_type == CTRL_CLOSE_EVENT) {
@@ -81,6 +101,44 @@ namespace {
   }
 
   template<typename T>
+  void emit_feedback(const T &packet) {
+    std::scoped_lock lock(feedback_mutex);
+    if (feedback_pipe_handle == INVALID_HANDLE_VALUE) {
+      return;
+    }
+
+    if (!write_exact(feedback_pipe_handle, &packet.header, sizeof(packet.header))) {
+      return;
+    }
+
+    constexpr auto payload_size = sizeof(T) - sizeof(feedback_header_t);
+    if constexpr (payload_size > 0) {
+      (void) write_exact(
+        feedback_pipe_handle,
+        reinterpret_cast<const std::uint8_t *>(&packet) + sizeof(packet.header),
+        payload_size
+      );
+    }
+  }
+
+  void emit_motion_request(std::int32_t global_index, std::uint8_t client_relative_index, std::uint8_t motion_type, std::uint16_t report_rate) {
+    motion_report_rate_t packet {
+      {
+        version,
+        static_cast<std::uint16_t>(feedback_type_e::motion_report_rate),
+        static_cast<std::uint16_t>(sizeof(motion_report_rate_t) - sizeof(feedback_header_t)),
+        global_index,
+        client_relative_index,
+        {0, 0, 0},
+      },
+      report_rate,
+      motion_type,
+      0,
+    };
+    emit_feedback(packet);
+  }
+
+  template<typename T>
   bool decode_packet(const command_header_t &header, const std::vector<std::uint8_t> &payload, T &packet) {
     const auto expected_payload_size = sizeof(T) - sizeof(command_header_t);
     if (payload.size() != expected_payload_size) {
@@ -111,6 +169,15 @@ namespace {
               << " client=" << static_cast<int>(packet.client_relative_index)
               << " caps=0x" << std::hex << packet.capabilities
               << " buttons=0x" << packet.supported_buttons << std::dec << "\n";
+
+    (void) device_backend->create(packet);
+
+    if (packet.capabilities & LI_CCAP_ACCEL) {
+      emit_motion_request(packet.header.global_index, packet.client_relative_index, LI_MOTION_TYPE_ACCEL, 100);
+    }
+    if (packet.capabilities & LI_CCAP_GYRO) {
+      emit_motion_request(packet.header.global_index, packet.client_relative_index, LI_MOTION_TYPE_GYRO, 100);
+    }
   }
 
   void handle_destroy(const destroy_dualsense_device_t &packet) {
@@ -122,28 +189,33 @@ namespace {
     slots[packet.header.global_index] = {};
 
     std::cout << "padsvc: destroy_dualsense_device slot=" << packet.header.global_index << "\n";
+    device_backend->destroy(packet.header.global_index);
   }
 
   void handle_state(const update_state_t &packet) {
     std::cout << "padsvc: update_state slot=" << packet.header.global_index
               << " buttons=0x" << std::hex << packet.button_flags << std::dec << "\n";
+    device_backend->update_state(packet);
   }
 
   void handle_touch(const update_touch_t &packet) {
     std::cout << "padsvc: update_touch slot=" << packet.header.global_index
               << " event=" << static_cast<int>(packet.event_type)
               << " pointer=" << packet.pointer_id << "\n";
+    device_backend->update_touch(packet);
   }
 
   void handle_motion(const update_motion_t &packet) {
     std::cout << "padsvc: update_motion slot=" << packet.header.global_index
               << " type=" << static_cast<int>(packet.motion_type) << "\n";
+    device_backend->update_motion(packet);
   }
 
   void handle_battery(const update_battery_t &packet) {
     std::cout << "padsvc: update_battery slot=" << packet.header.global_index
               << " state=" << static_cast<int>(packet.state)
               << " percentage=" << static_cast<int>(packet.percentage) << "\n";
+    device_backend->update_battery(packet);
   }
 
   void handle_command(const command_header_t &header, const std::vector<std::uint8_t> &payload) {
@@ -220,7 +292,13 @@ int main() {
   }
 
   std::cout << "padsvc: command pipe connected\n";
-  std::cout << "padsvc: feedback pipe created (connection not active in skeleton)\n";
+  if (connect_pipe(feedback_pipe)) {
+    std::scoped_lock lock(feedback_mutex);
+    feedback_pipe_handle = feedback_pipe;
+    std::cout << "padsvc: feedback pipe connected\n";
+  } else {
+    std::cout << "padsvc: feedback pipe not connected\n";
+  }
 
   while (running) {
     command_header_t header {};
@@ -242,6 +320,14 @@ int main() {
   }
 
   CloseHandle(command_pipe);
-  CloseHandle(feedback_pipe);
+  {
+    std::scoped_lock lock(feedback_mutex);
+    if (feedback_pipe_handle == INVALID_HANDLE_VALUE) {
+      CloseHandle(feedback_pipe);
+    } else {
+      CloseHandle(feedback_pipe_handle);
+      feedback_pipe_handle = INVALID_HANDLE_VALUE;
+    }
+  }
   return 0;
 }
