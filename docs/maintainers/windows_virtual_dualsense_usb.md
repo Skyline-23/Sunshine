@@ -546,3 +546,179 @@ The Windows Virtual USB DualSense effort is only considered complete when all of
 - Real DualSense HID input/output report model
 - Driver-to-service output report forwarding for rumble, RGB LED, and adaptive triggers
 - Driver packaging/signing/build integration on Windows
+
+## DSUSB File Map
+
+The DSUSB path currently spans these files:
+
+- `src/platform/windows/gamepad_backend.h`
+- `src/platform/windows/gamepad_backend_factory.cpp`
+- `src/platform/windows/gamepad_backend_vigem.cpp`
+- `src/platform/windows/gamepad_backend_dualsense_usb.cpp`
+- `src/platform/windows/pad_service_client.h`
+- `src/platform/windows/pad_service_client_named_pipe.cpp`
+- `src/platform/windows/pad_service_protocol.h`
+- `src/platform/windows/dualsense_usb_bus.h`
+- `tools/sunshinepadsvc.cpp`
+- `tools/padsvc_virtual_device.h`
+- `tools/padsvc_virtual_device.cpp`
+- `drivers/windows/dsusb/dsusb_bus_ioctl.h`
+- `drivers/windows/dsusb/dsusb_bus_driver.c`
+- `drivers/windows/dsusb/dsusb_ude_device.h`
+- `drivers/windows/dsusb/dsusb_ude_device.c`
+- `drivers/windows/dsusb/dsusb_dualsense_descriptors.h`
+- `drivers/windows/dsusb/dsusb_dualsense_descriptors.c`
+- `drivers/windows/dsusb/dsusb_bus.inf`
+- `src_assets/windows/misc/dualsense-usb/install-dsusb-driver.bat`
+- `src_assets/windows/misc/dualsense-usb/uninstall-dsusb-driver.bat`
+- `src_assets/windows/misc/dualsense-usb/start-pad-service.bat`
+- `src_assets/windows/misc/dualsense-usb/stop-pad-service.bat`
+
+## DSUSB Build and Install Notes
+
+The repository now contains:
+
+- a user-mode/backend path in Sunshine that selects `dualsense_usb`
+- a named-pipe pad service client
+- a `sunshinepadsvc` server skeleton
+- a DSUSB bus driver skeleton that accepts IOCTLs
+- a split between bus control and UDE-backed device creation
+- a minimal DualSense descriptor skeleton
+
+What this means in practice:
+
+- the control plane exists
+- the process boundaries exist
+- the IOCTL contracts exist
+- the service and backend can talk to each other
+- the driver can accept commands and store per-slot state
+
+What is still missing is the actual UDE-backed USB device creation and the real DualSense output report path.
+
+### Driver Installation
+
+Current starter assets:
+
+- `drivers/windows/dsusb/dsusb_bus.inf`
+- `src_assets/windows/misc/dualsense-usb/install-dsusb-driver.bat`
+- `src_assets/windows/misc/dualsense-usb/uninstall-dsusb-driver.bat`
+
+Current behavior:
+
+- the batch script accepts either the `.inf` path or the raw `.sys` path
+- `.inf` install path uses `pnputil /add-driver ... /install`
+- raw `.sys` install path creates/starts the `SunshineDualSenseBus` kernel service
+
+This is only a starter path. Real Windows deployment still needs:
+
+- a signed driver package
+- packaging integration with the Sunshine Windows artifacts
+- a decision on whether installation is owned by setup scripts or the final installer
+
+### Pad Service Runtime
+
+Current starter assets:
+
+- `tools/sunshinepadsvc.cpp`
+- `src_assets/windows/misc/dualsense-usb/start-pad-service.bat`
+- `src_assets/windows/misc/dualsense-usb/stop-pad-service.bat`
+
+Current behavior:
+
+- Sunshine can auto-launch `sunshinepadsvc.exe` when the named pipe is absent
+- the service exposes command and feedback named pipes
+- the service forwards commands into the DSUSB bus contract
+- the service reports backend availability, installed state, service-running state, and driver version
+
+### What Works Today
+
+- Sunshine can select a `dualsense_usb` backend
+- Sunshine can auto-launch `sunshinepadsvc.exe`
+- `sunshinepadsvc` accepts create/destroy/update commands over named pipes
+- `sunshinepadsvc` forwards those commands into the DSUSB bus contract
+- the DSUSB bus driver skeleton accepts IOCTLs and stores per-slot state
+- the UDE layer is split out behind `DsUsbUde*` functions
+- a descriptor skeleton exists for the future virtual device path
+
+### What Is Still Missing
+
+#### 1. Real UDE Device Creation
+
+`drivers/windows/dsusb/dsusb_ude_device.c` currently stores metadata only. It does not create an actual UDE root, USB device, interface, or endpoints.
+
+Needed work:
+
+- create a per-slot UDE object model
+- register the USB device with UDE
+- bind the descriptor set to the device
+- expose interrupt IN and OUT endpoints
+- manage per-slot lifecycle and teardown
+
+#### 2. Real DualSense HID Report Model
+
+The HID descriptor is intentionally minimal.
+
+Needed work:
+
+- replace the skeleton report descriptor with a report layout that matches the intended DualSense emulation target
+- define stable input report structures
+- define output report structures for:
+  - rumble
+  - RGB LED
+  - adaptive trigger effects
+- map Sunshine state into those reports
+
+#### 3. Output Report Path
+
+The current driver does not yet capture host output reports and push them back to `sunshinepadsvc`.
+
+Needed work:
+
+- collect output reports from the HID OUT endpoint
+- translate them into the service feedback protocol
+- forward them through the feedback named pipe
+- validate the end-to-end path:
+  `game -> driver -> sunshinepadsvc -> Sunshine -> Shadow`
+
+#### 4. Driver Packaging
+
+The INF and batch scripts are a starting point only.
+
+Needed work:
+
+- sign the driver package
+- package `dsusb_bus_driver.sys` and `dsusb_bus.inf` with the Windows build artifacts
+- decide whether installation should be driven by:
+  - `pnputil`
+  - a setup script
+  - the existing `sunshine-setup.ps1`
+  - a future Windows installer step
+
+#### 5. Build Integration
+
+The repository includes driver source but does not yet build it.
+
+Needed work:
+
+- add a WDK-capable build path
+- decide whether the driver builds through:
+  - a Visual Studio / WDK project
+  - MSBuild invoked from CI
+  - a separate driver-only workflow
+- document local build requirements
+
+## Practical Testing Checklist
+
+When the real UDE path is implemented, validate in this order:
+
+1. `sunshinepadsvc.exe` starts and creates both named pipes
+2. `dualsense_usb` backend reports available in `/api/gamepads/backends`
+3. `sunshinepadsvc` can create slot 0 successfully
+4. `SunshineDualSenseBus` accepts IOCTL create/update/destroy calls
+5. Windows enumerates a new USB/HID game controller
+6. Button and stick input reaches the game
+7. Motion and touch reports flow correctly
+8. Host output reports reach Shadow as:
+   - rumble
+   - RGB LED
+   - adaptive triggers
