@@ -11,11 +11,14 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <filesystem>
 #include <memory>
+#include <string>
 #include <thread>
 #include <vector>
 
 // local includes
+#include "misc.h"
 #include "pad_service_client.h"
 #include "pad_service_protocol.h"
 #include "src/logging.h"
@@ -157,6 +160,43 @@ namespace platf {
     }
 
   private:
+    bool try_start_pad_service() const {
+      const auto service_path = platf::appdata().parent_path() / "tools" / "sunshinepadsvc.exe";
+      if (!std::filesystem::exists(service_path)) {
+        return false;
+      }
+      const auto working_dir = service_path.parent_path();
+
+      std::wstring command_line = L"\"";
+      command_line += service_path.wstring();
+      command_line += L"\"";
+
+      STARTUPINFOW startup_info {};
+      startup_info.cb = sizeof(startup_info);
+
+      PROCESS_INFORMATION process_info {};
+      const auto created = CreateProcessW(
+        service_path.c_str(),
+        command_line.data(),
+        nullptr,
+        nullptr,
+        FALSE,
+        CREATE_NO_WINDOW | DETACHED_PROCESS,
+        nullptr,
+        working_dir.c_str(),
+        &startup_info,
+        &process_info
+      );
+      if (!created) {
+        BOOST_LOG(warning) << "Failed to launch sunshinepadsvc.exe for DualSense USB backend"sv;
+        return false;
+      }
+
+      CloseHandle(process_info.hProcess);
+      CloseHandle(process_info.hThread);
+      return true;
+    }
+
     void query_status_from_service() {
       auto pipe = open_pipe();
       if (pipe == INVALID_HANDLE_VALUE) {
@@ -405,6 +445,17 @@ namespace platf {
 
       auto error = GetLastError();
       if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
+        if (!service_start_attempted) {
+          service_start_attempted = true;
+          if (try_start_pad_service() && WaitNamedPipeW(pad_service_protocol::named_pipe_path, 2000)) {
+            return {
+              true,
+              true,
+              true,
+              ""
+            };
+          }
+        }
         return {
           false,
           false,
@@ -440,6 +491,7 @@ namespace platf {
     std::atomic_bool shutdown_requested {false};
     HANDLE feedback_pipe {INVALID_HANDLE_VALUE};
     std::thread feedback_thread;
+    mutable bool service_start_attempted {false};
   };
 
   std::unique_ptr<pad_service_client_t> make_pad_service_client() {
