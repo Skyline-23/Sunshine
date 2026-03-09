@@ -14,12 +14,13 @@ namespace platf::pad_service_protocol {
   constexpr auto named_pipe_feedback_path = LR"(\\.\pipe\SunshinePadServiceFeedback)";
 
   enum class command_e: std::uint16_t {
-    create_dualsense_device = 1,
-    destroy_dualsense_device = 2,
-    update_state = 3,
-    update_touch = 4,
-    update_motion = 5,
-    update_battery = 6,
+    query_status = 1,
+    create_dualsense_device = 2,
+    destroy_dualsense_device = 3,
+    update_state = 4,
+    update_touch = 5,
+    update_motion = 6,
+    update_battery = 7,
   };
 
   enum class feedback_type_e: std::uint16_t {
@@ -43,6 +44,18 @@ namespace platf::pad_service_protocol {
     std::uint16_t reserved;
     std::int32_t global_index;
     std::int32_t status;
+  };
+
+  struct query_status_t {
+    command_header_t header;
+  };
+
+  struct query_status_response_t {
+    command_response_t header;
+    std::uint8_t available;
+    std::uint8_t installed;
+    std::uint8_t service_running;
+    std::uint8_t reserved;
   };
 
   struct feedback_header_t {

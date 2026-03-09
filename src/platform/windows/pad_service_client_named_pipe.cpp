@@ -28,6 +28,7 @@ namespace platf {
     int init() override {
       status_cache = probe_status();
       if (status_cache.available) {
+        query_status_from_service();
         maybe_start_feedback_pump();
       }
       return 0;
@@ -156,6 +157,56 @@ namespace platf {
     }
 
   private:
+    void query_status_from_service() {
+      auto pipe = open_pipe();
+      if (pipe == INVALID_HANDLE_VALUE) {
+        status_cache = probe_status();
+        return;
+      }
+
+      pad_service_protocol::query_status_t command {
+        {
+          pad_service_protocol::version,
+          static_cast<std::uint16_t>(pad_service_protocol::command_e::query_status),
+          0,
+          -1,
+        }
+      };
+
+      DWORD bytes_written = 0;
+      if (!WriteFile(pipe, &command, sizeof(command), &bytes_written, nullptr) || bytes_written != sizeof(command)) {
+        CloseHandle(pipe);
+        status_cache = probe_status();
+        return;
+      }
+
+      pad_service_protocol::query_status_response_t response {};
+      DWORD bytes_read = 0;
+      if (!ReadFile(pipe, &response, sizeof(response), &bytes_read, nullptr) || bytes_read != sizeof(response)) {
+        CloseHandle(pipe);
+        status_cache = probe_status();
+        return;
+      }
+
+      CloseHandle(pipe);
+
+      if (response.header.version != pad_service_protocol::version ||
+          response.header.command != static_cast<std::uint16_t>(pad_service_protocol::command_e::query_status) ||
+          response.header.status != 0) {
+        status_cache = probe_status();
+        return;
+      }
+
+      status_cache.available = response.available != 0;
+      status_cache.installed = response.installed != 0;
+      status_cache.service_running = response.service_running != 0;
+      if (status_cache.available) {
+        status_cache.reason.clear();
+      } else if (status_cache.reason.empty()) {
+        status_cache.reason = "gamepads.dualsense-usb-not-available";
+      }
+    }
+
     template<typename T>
     bool decode_feedback_packet(const pad_service_protocol::feedback_header_t &header, const std::vector<std::uint8_t> &payload, T &packet) {
       const auto expected_payload_size = sizeof(T) - sizeof(pad_service_protocol::feedback_header_t);

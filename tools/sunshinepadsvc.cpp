@@ -230,6 +230,8 @@ namespace {
 
   int handle_command(const command_header_t &header, const std::vector<std::uint8_t> &payload) {
     switch (static_cast<command_e>(header.command)) {
+      case command_e::query_status:
+        return 0;
       case command_e::create_dualsense_device:
         {
           create_dualsense_device_t packet {};
@@ -336,6 +338,25 @@ int main() {
     }
 
     auto status = handle_command(header, payload);
+
+    if (static_cast<command_e>(header.command) == command_e::query_status) {
+      auto current_status = device_backend->status();
+      query_status_response_t response {
+        {
+          version,
+          header.command,
+          0,
+          header.global_index,
+          status,
+        },
+        static_cast<std::uint8_t>(current_status.available ? 1 : 0),
+        static_cast<std::uint8_t>(current_status.available ? 1 : 0),
+        1,
+        0,
+      };
+      (void) write_exact(command_pipe, &response, sizeof(response));
+      continue;
+    }
 
     command_response_t response {
       version,
