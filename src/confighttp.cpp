@@ -1407,7 +1407,7 @@ namespace confighttp {
     output_tree["installed"] = status.installed;
     output_tree["service_running"] = status.service_running;
     output_tree["available"] = status.available;
-    output_tree["version"] = "";
+    output_tree["version"] = status.version;
     output_tree["reason"] = status.reason;
     return output_tree;
   }

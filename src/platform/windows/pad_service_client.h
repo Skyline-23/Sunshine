@@ -17,6 +17,7 @@ namespace platf {
     bool available {};
     bool installed {};
     bool service_running {};
+    std::string version;
     std::string reason;
   };
 
