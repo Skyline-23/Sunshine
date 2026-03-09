@@ -152,9 +152,14 @@ namespace {
     return true;
   }
 
-  void handle_create(const create_dualsense_device_t &packet) {
+  int handle_create(const create_dualsense_device_t &packet) {
     if (packet.header.global_index < 0 || packet.header.global_index >= static_cast<int>(slots.size())) {
-      return;
+      return -1;
+    }
+
+    if (device_backend->create(packet)) {
+      std::cout << "padsvc: create_dualsense_device failed for slot=" << packet.header.global_index << "\n";
+      return -1;
     }
 
     std::scoped_lock lock(slot_mutex);
@@ -170,19 +175,19 @@ namespace {
               << " caps=0x" << std::hex << packet.capabilities
               << " buttons=0x" << packet.supported_buttons << std::dec << "\n";
 
-    (void) device_backend->create(packet);
-
     if (packet.capabilities & LI_CCAP_ACCEL) {
       emit_motion_request(packet.header.global_index, packet.client_relative_index, LI_MOTION_TYPE_ACCEL, 100);
     }
     if (packet.capabilities & LI_CCAP_GYRO) {
       emit_motion_request(packet.header.global_index, packet.client_relative_index, LI_MOTION_TYPE_GYRO, 100);
     }
+
+    return 0;
   }
 
-  void handle_destroy(const destroy_dualsense_device_t &packet) {
+  int handle_destroy(const destroy_dualsense_device_t &packet) {
     if (packet.header.global_index < 0 || packet.header.global_index >= static_cast<int>(slots.size())) {
-      return;
+      return -1;
     }
 
     std::scoped_lock lock(slot_mutex);
@@ -190,41 +195,46 @@ namespace {
 
     std::cout << "padsvc: destroy_dualsense_device slot=" << packet.header.global_index << "\n";
     device_backend->destroy(packet.header.global_index);
+    return 0;
   }
 
-  void handle_state(const update_state_t &packet) {
+  int handle_state(const update_state_t &packet) {
     std::cout << "padsvc: update_state slot=" << packet.header.global_index
               << " buttons=0x" << std::hex << packet.button_flags << std::dec << "\n";
     device_backend->update_state(packet);
+    return 0;
   }
 
-  void handle_touch(const update_touch_t &packet) {
+  int handle_touch(const update_touch_t &packet) {
     std::cout << "padsvc: update_touch slot=" << packet.header.global_index
               << " event=" << static_cast<int>(packet.event_type)
               << " pointer=" << packet.pointer_id << "\n";
     device_backend->update_touch(packet);
+    return 0;
   }
 
-  void handle_motion(const update_motion_t &packet) {
+  int handle_motion(const update_motion_t &packet) {
     std::cout << "padsvc: update_motion slot=" << packet.header.global_index
               << " type=" << static_cast<int>(packet.motion_type) << "\n";
     device_backend->update_motion(packet);
+    return 0;
   }
 
-  void handle_battery(const update_battery_t &packet) {
+  int handle_battery(const update_battery_t &packet) {
     std::cout << "padsvc: update_battery slot=" << packet.header.global_index
               << " state=" << static_cast<int>(packet.state)
               << " percentage=" << static_cast<int>(packet.percentage) << "\n";
     device_backend->update_battery(packet);
+    return 0;
   }
 
-  void handle_command(const command_header_t &header, const std::vector<std::uint8_t> &payload) {
+  int handle_command(const command_header_t &header, const std::vector<std::uint8_t> &payload) {
     switch (static_cast<command_e>(header.command)) {
       case command_e::create_dualsense_device:
         {
           create_dualsense_device_t packet {};
           if (decode_packet(header, payload, packet)) {
-            handle_create(packet);
+            return handle_create(packet);
           }
         }
         break;
@@ -232,7 +242,7 @@ namespace {
         {
           destroy_dualsense_device_t packet {};
           if (decode_packet(header, payload, packet)) {
-            handle_destroy(packet);
+            return handle_destroy(packet);
           }
         }
         break;
@@ -240,7 +250,7 @@ namespace {
         {
           update_state_t packet {};
           if (decode_packet(header, payload, packet)) {
-            handle_state(packet);
+            return handle_state(packet);
           }
         }
         break;
@@ -248,7 +258,7 @@ namespace {
         {
           update_touch_t packet {};
           if (decode_packet(header, payload, packet)) {
-            handle_touch(packet);
+            return handle_touch(packet);
           }
         }
         break;
@@ -256,7 +266,7 @@ namespace {
         {
           update_motion_t packet {};
           if (decode_packet(header, payload, packet)) {
-            handle_motion(packet);
+            return handle_motion(packet);
           }
         }
         break;
@@ -264,16 +274,25 @@ namespace {
         {
           update_battery_t packet {};
           if (decode_packet(header, payload, packet)) {
-            handle_battery(packet);
+            return handle_battery(packet);
           }
         }
         break;
     }
+
+    return -1;
   }
 }  // namespace
 
 int main() {
   SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
+
+  auto backend_status = device_backend->status();
+  std::cout << "padsvc: device backend available=" << (backend_status.available ? "true" : "false");
+  if (!backend_status.reason.empty()) {
+    std::cout << " reason=" << backend_status.reason;
+  }
+  std::cout << "\n";
 
   const auto command_pipe = create_pipe(named_pipe_path, PIPE_ACCESS_DUPLEX);
   const auto feedback_pipe = create_pipe(named_pipe_feedback_path, PIPE_ACCESS_OUTBOUND);
@@ -316,7 +335,16 @@ int main() {
       continue;
     }
 
-    handle_command(header, payload);
+    auto status = handle_command(header, payload);
+
+    command_response_t response {
+      version,
+      header.command,
+      0,
+      header.global_index,
+      status,
+    };
+    (void) write_exact(command_pipe, &response, sizeof(response));
   }
 
   CloseHandle(command_pipe);

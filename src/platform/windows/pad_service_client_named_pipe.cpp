@@ -186,9 +186,8 @@ namespace platf {
       const auto *data = reinterpret_cast<const char *>(&command);
       const auto command_size = static_cast<DWORD>(sizeof(T));
       const auto write_ok = WriteFile(pipe, data, command_size, &bytes_written, nullptr);
-      CloseHandle(pipe);
-
       if (!write_ok || bytes_written != command_size) {
+        CloseHandle(pipe);
         BOOST_LOG(warning) << "Failed to send command to SunshinePadService named pipe"sv;
         status_cache.available = false;
         status_cache.service_running = false;
@@ -196,6 +195,26 @@ namespace platf {
           status_cache.reason = "gamepads.dualsense-usb-not-available";
         }
         return -1;
+      }
+
+      pad_service_protocol::command_response_t response {};
+      DWORD bytes_read = 0;
+      const auto read_ok = ReadFile(pipe, &response, sizeof(response), &bytes_read, nullptr);
+      CloseHandle(pipe);
+
+      if (!read_ok || bytes_read != sizeof(response) || response.version != pad_service_protocol::version || response.command != command.header.command) {
+        BOOST_LOG(warning) << "Failed to read command response from SunshinePadService named pipe"sv;
+        status_cache.available = false;
+        status_cache.service_running = false;
+        if (status_cache.reason.empty()) {
+          status_cache.reason = "gamepads.dualsense-usb-not-available";
+        }
+        return -1;
+      }
+
+      if (response.status != 0) {
+        BOOST_LOG(warning) << "SunshinePadService rejected command "sv << response.command << " for slot "sv << response.global_index;
+        return response.status;
       }
 
       maybe_start_feedback_pump();

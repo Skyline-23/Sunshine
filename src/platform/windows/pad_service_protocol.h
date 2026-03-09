@@ -37,6 +37,14 @@ namespace platf::pad_service_protocol {
     std::int32_t global_index;
   };
 
+  struct command_response_t {
+    std::uint32_t version;
+    std::uint16_t command;
+    std::uint16_t reserved;
+    std::int32_t global_index;
+    std::int32_t status;
+  };
+
   struct feedback_header_t {
     std::uint32_t version;
     std::uint16_t type;

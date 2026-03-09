@@ -6,15 +6,22 @@
 
 // standard includes
 #include <memory>
+#include <string>
 
 // local includes
 #include "src/platform/windows/pad_service_protocol.h"
 
 namespace padsvc {
+  struct virtual_device_status_t {
+    bool available {};
+    std::string reason;
+  };
+
   class virtual_device_backend_t {
   public:
     virtual ~virtual_device_backend_t() = default;
 
+    virtual virtual_device_status_t status() const = 0;
     virtual int create(const platf::pad_service_protocol::create_dualsense_device_t &packet) = 0;
     virtual void destroy(std::int32_t global_index) = 0;
     virtual void update_state(const platf::pad_service_protocol::update_state_t &packet) = 0;
