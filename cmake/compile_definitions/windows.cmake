@@ -70,6 +70,7 @@ set(PLATFORM_TARGET_FILES
         "${CMAKE_SOURCE_DIR}/src/platform/windows/gamepad_backend_vigem.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/input.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/pad_service_client.h"
+        "${CMAKE_SOURCE_DIR}/src/platform/windows/pad_service_protocol.h"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/pad_service_client_stub.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/display.h"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/display_base.cpp"
