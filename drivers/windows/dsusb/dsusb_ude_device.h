@@ -10,6 +10,13 @@
 
 typedef struct _DSUSB_UDE_SLOT {
   BOOLEAN Created;
+  UCHAR ClientRelativeIndex;
+  UCHAR Type;
+  USHORT Capabilities;
+  ULONG SupportedButtons;
+  ULONG DeviceDescriptorLength;
+  ULONG ConfigurationDescriptorLength;
+  ULONG HidReportDescriptorLength;
 } DSUSB_UDE_SLOT, *PDSUSB_UDE_SLOT;
 
 NTSTATUS DsUsbUdeCreate(PDSUSB_UDE_SLOT slot, PDSUSB_CREATE_DEVICE_PACKET packet);

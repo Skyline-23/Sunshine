@@ -4,10 +4,21 @@
  */
 
 #include "dsusb_ude_device.h"
+#include "dsusb_dualsense_descriptors.h"
 
 NTSTATUS DsUsbUdeCreate(PDSUSB_UDE_SLOT slot, PDSUSB_CREATE_DEVICE_PACKET packet) {
-  UNREFERENCED_PARAMETER(packet);
+  PDSUSB_DESCRIPTOR_BLOB device_descriptor = DsUsbGetDeviceDescriptor();
+  PDSUSB_DESCRIPTOR_BLOB configuration_descriptor = DsUsbGetConfigurationDescriptor();
+  PDSUSB_DESCRIPTOR_BLOB hid_report_descriptor = DsUsbGetHidReportDescriptor();
+
   slot->Created = TRUE;
+  slot->ClientRelativeIndex = packet->ClientRelativeIndex;
+  slot->Type = packet->Type;
+  slot->Capabilities = packet->Capabilities;
+  slot->SupportedButtons = packet->SupportedButtons;
+  slot->DeviceDescriptorLength = device_descriptor->Length;
+  slot->ConfigurationDescriptorLength = configuration_descriptor->Length;
+  slot->HidReportDescriptorLength = hid_report_descriptor->Length;
   return STATUS_SUCCESS;
 }
 
