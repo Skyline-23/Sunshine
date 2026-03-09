@@ -17,6 +17,7 @@
 #include <ViGEm/Client.h>
 
 // local includes
+#include "gamepad_backend.h"
 #include "keylayout.h"
 #include "misc.h"
 #include "src/config.h"
@@ -191,20 +192,6 @@ namespace platf {
         return;
     }
   }
-
-  class windows_gamepad_backend_t {
-  public:
-    virtual ~windows_gamepad_backend_t() = default;
-
-    virtual int init() = 0;
-    virtual int alloc_gamepad(const gamepad_id_t &id, const gamepad_arrival_t &metadata, feedback_queue_t feedback_queue) = 0;
-    virtual void free_gamepad(int nr) = 0;
-    virtual void update_gamepad(int nr, const gamepad_state_t &gamepad_state) = 0;
-    virtual void touch_gamepad(const gamepad_touch_t &touch) = 0;
-    virtual void motion_gamepad(const gamepad_motion_t &motion) = 0;
-    virtual void battery_gamepad(const gamepad_battery_t &battery) = 0;
-    virtual const std::vector<supported_gamepad_t> &supported_gamepads() const = 0;
-  };
 
   class vigem_backend_t final: public windows_gamepad_backend_t {
   public:
@@ -486,7 +473,7 @@ namespace platf {
     input_t result {new input_raw_t {}};
     auto &raw = *(input_raw_t *) result.get();
 
-    raw.gamepad_backend = std::make_unique<vigem_backend_t>();
+    raw.gamepad_backend = make_gamepad_backend();
     if (raw.gamepad_backend->init()) {
       raw.gamepad_backend.reset();
     }
@@ -497,6 +484,10 @@ namespace platf {
     raw.fnDestroySyntheticPointerDevice = (decltype(DestroySyntheticPointerDevice) *) GetProcAddress(GetModuleHandleA("user32.dll"), "DestroySyntheticPointerDevice");
 
     return result;
+  }
+
+  std::unique_ptr<windows_gamepad_backend_t> make_gamepad_backend() {
+    return std::make_unique<vigem_backend_t>();
   }
 
   /**
