@@ -14,6 +14,7 @@
 #include <cstring>
 #include <iostream>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 // local includes
@@ -313,13 +314,13 @@ int main() {
   }
 
   std::cout << "padsvc: command pipe connected\n";
-  if (connect_pipe(feedback_pipe)) {
-    std::scoped_lock lock(feedback_mutex);
-    feedback_pipe_handle = feedback_pipe;
-    std::cout << "padsvc: feedback pipe connected\n";
-  } else {
-    std::cout << "padsvc: feedback pipe not connected\n";
-  }
+  std::thread feedback_accept_thread([feedback_pipe] {
+    if (connect_pipe(feedback_pipe)) {
+      std::scoped_lock lock(feedback_mutex);
+      feedback_pipe_handle = feedback_pipe;
+      std::cout << "padsvc: feedback pipe connected\n";
+    }
+  });
 
   while (running) {
     command_header_t header {};
@@ -373,7 +374,14 @@ int main() {
     std::scoped_lock lock(feedback_mutex);
     if (feedback_pipe_handle == INVALID_HANDLE_VALUE) {
       CloseHandle(feedback_pipe);
-    } else {
+    }
+  }
+  if (feedback_accept_thread.joinable()) {
+    feedback_accept_thread.join();
+  }
+  {
+    std::scoped_lock lock(feedback_mutex);
+    if (feedback_pipe_handle != INVALID_HANDLE_VALUE) {
       CloseHandle(feedback_pipe_handle);
       feedback_pipe_handle = INVALID_HANDLE_VALUE;
     }
