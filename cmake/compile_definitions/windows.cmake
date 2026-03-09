@@ -71,7 +71,7 @@ set(PLATFORM_TARGET_FILES
         "${CMAKE_SOURCE_DIR}/src/platform/windows/input.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/pad_service_client.h"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/pad_service_protocol.h"
-        "${CMAKE_SOURCE_DIR}/src/platform/windows/pad_service_client_stub.cpp"
+        "${CMAKE_SOURCE_DIR}/src/platform/windows/pad_service_client_named_pipe.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/display.h"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/display_base.cpp"
         "${CMAKE_SOURCE_DIR}/src/platform/windows/display_vram.cpp"
