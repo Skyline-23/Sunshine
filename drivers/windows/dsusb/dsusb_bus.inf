@@ -1,0 +1,46 @@
+[Version]
+Signature="$WINDOWS NT$"
+Class=System
+ClassGuid={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=dsusb_bus.cat
+DriverVer=03/09/2026,1.0.0.0
+PnpLockdown=1
+
+[DestinationDirs]
+DefaultDestDir = 12
+DsUsb_CopyFiles = 12
+
+[SourceDisksNames]
+1 = %DiskName%,,,
+
+[SourceDisksFiles]
+dsusb_bus_driver.sys = 1
+
+[Manufacturer]
+%ProviderName% = Sunshine,NTamd64
+
+[Sunshine.NTamd64]
+%DeviceName% = DsUsb_Install, Root\SunshineDualSenseBus
+
+[DsUsb_Install.NT]
+CopyFiles = DsUsb_CopyFiles
+
+[DsUsb_CopyFiles]
+dsusb_bus_driver.sys
+
+[DsUsb_Install.NT.Services]
+AddService = SunshineDualSenseBus,0x00000002,DsUsb_Service
+
+[DsUsb_Service]
+DisplayName = %ServiceName%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\dsusb_bus_driver.sys
+
+[Strings]
+ProviderName = "LizardByte"
+DiskName = "Sunshine DualSense USB Driver Disk"
+DeviceName = "Sunshine DualSense USB Bus"
+ServiceName = "Sunshine DualSense USB Bus"
